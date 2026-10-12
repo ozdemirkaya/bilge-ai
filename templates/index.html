@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bilge AI - İnteraktif Demo</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --danger: #dc2626;
+            --danger-hover: #b91c1c;
+            --bg: #0f172a;
+            --panel-bg: rgba(15, 23, 42, 0.85);
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+        body { 
+            margin: 0; 
+            padding: 0; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+            background-color: var(--bg); 
+            color: var(--text);
+            height: 100vh; 
+            overflow: hidden;
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+        }
+        #app-container { 
+            width: 100%; 
+            height: 100%; 
+            position: relative; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        #video-container { 
+            width: 100%; 
+            height: 100%; 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            z-index: 1;
+            background-color: #000;
+        }
+        #avatar-video { 
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover; 
+        }
+        /* Overlays */
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
+            transition: opacity 0.3s;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+        .overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .panel {
+            background: rgba(30, 41, 59, 0.9);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 40px;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 520px;
+            box-sizing: border-box;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            margin: auto;
+        }
+        @media (max-width: 640px) {
+            .overlay {
+                padding: 16px;
+            }
+            .panel {
+                padding: 28px 18px;
+                border-radius: 14px;
+            }
+        }
+        .panel h1 {
+            margin-top: 0;
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+        .panel p {
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-hover); transform: translateY(-2px); }
+        .btn-primary:disabled { background: #475569; cursor: not-allowed; transform: none; }
+        
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-danger:hover { background: var(--danger-hover); transform: translateY(-2px); }
+
+        .btn-secondary { background: #334155; color: white; }
+        .btn-secondary:hover { background: #475569; transform: translateY(-2px); }
+        
+        /* Active Session UI */
+        #active-ui {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+        }
+        #active-ui.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        
+        #controls-bar {
+            display: flex;
+            gap: 15px;
+            background: var(--panel-bg);
+            padding: 15px 25px;
+            border-radius: 50px;
+            border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            align-items: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        
+        #status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(0,0,0,0.5);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+        .pulse {
+            width: 10px; height: 10px;
+            background-color: #22c55e;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #22c55e;
+            animation: pulse-anim 1.5s infinite;
+        }
+        .pulse.listening { background-color: #3b82f6; box-shadow: 0 0 10px #3b82f6; }
+        .pulse.speaking { background-color: #a855f7; box-shadow: 0 0 10px #a855f7; }
+        
+        @keyframes pulse-anim {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+
+        #timer {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #fff;
+            background: rgba(0,0,0,0.5);
+            padding: 8px 15px;
+            border-radius: 8px;
+        }
+
+        /* Dev Tools */
+        {% if demo_dev_tools %}
+        #debug-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.8);
+            color: #22c55e;
+            font-family: monospace;
+            font-size: 12px;
+            padding: 15px;
+            border-radius: 8px;
+            width: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 20;
+            border: 1px solid #333;
+        }
+        #dev-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .btn-dev { padding: 5px 10px; font-size: 11px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer; }
+        .btn-dev:hover { background: #444; }
+        {% endif %}
+        
+        /* Chat Panel CSS */
+        #chat-panel {
+            position: absolute;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            z-index: 15;
+            transition: opacity 0.2s ease;
+            box-shadow: -5px 0 20px rgba(0,0,0,0.5);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+        #chat-panel.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        @media (min-width: 768px) {
+            #chat-panel {
+                top: 20px;
+                right: 20px;
+                bottom: 100px;
+                width: 350px;
+            }
+        }
+        @media (max-width: 767px) {
+            #chat-panel {
+                bottom: 100px;
+                left: 10px;
+                right: 10px;
+                height: 50vh;
+            }
+        }
+        
+        .chat-header {
+            padding: 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        #chat-messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .message {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            line-height: 1.4;
+            word-wrap: break-word;
+        }
+        .message.system { align-self: center; background: rgba(255,255,255,0.1); color: #ccc; font-size: 0.85rem; padding: 6px 12px; }
+        .message.user { align-self: flex-end; background: var(--primary); color: #fff; border-bottom-right-radius: 2px; }
+        .message.avatar { align-self: flex-start; background: #334155; color: #fff; border-bottom-left-radius: 2px; }
+        
+        .chat-input-area {
+            display: flex;
+            padding: 12px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            gap: 10px;
+            background: rgba(0,0,0,0.2);
+        }
+        #chat-input {
+            flex: 1;
+            padding: 10px 15px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(0,0,0,0.5);
+            color: #fff;
+            outline: none;
+            font-size: 0.95rem;
+        }
+        #chat-input:focus { border-color: var(--primary); }
+        #chat-send-btn {
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            border-radius: 20px;
+            padding: 0 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        #chat-send-btn:hover { background: var(--primary-hover); transform: scale(1.05); }
+    </style>
+</head>
+<body>
+
+    <div id="app-container">
+        
+        <!-- Video Container -->
+        <div id="video-container">
+            <video id="avatar-video" autoplay playsinline></video>
+        </div>
+
+        <!-- Active UI Overlay (Status & Controls) -->
+        <div id="active-ui">
+            <div id="status-indicator">
+                <div id="status-pulse" class="pulse"></div>
+                <span id="status-text">Bağlanıyor...</span>
+                <div id="timer">01:00</div>
+            </div>
+            
+            <div id="controls-bar">
+                <button id="mic-toggle-btn" class="btn btn-secondary">
+                    <span id="mic-icon">🎙️</span> Sessize Al
+                </button>
+                <button id="chat-toggle-btn" class="btn btn-secondary" style="background-color: #3b82f6; color: white;">
+                    <span id="chat-icon">💬</span> Sohbet
+                </button>
+                <button id="kapat-btn" class="btn btn-danger">Oturumu Bitir</button>
+            </div>
+        </div>
+
+        <!-- Chat Panel -->
+        <div id="chat-panel" class="hidden">
+            <div class="chat-header">
+                <h3 style="margin: 0; font-size: 1.1rem; color: #fff;">Yazılı Sohbet</h3>
+                <button id="chat-close-btn" style="background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            </div>
+            <div id="chat-messages">
+                <div class="message system">Bilge AI ile yazılı sohbete başlayın.</div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="chat-input" placeholder="Bir mesaj yazın..." autocomplete="off" />
+                <button id="chat-send-btn">Gönder</button>
+            </div>
+        </div>
+
+        <!-- Welcome Overlay -->
+        <div id="welcome-overlay" class="overlay">
+            <div class="panel">
+                <div style="width: 64px; height: 64px; background: linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(168, 85, 247, 0.2)); border-radius: 50%; display: flex; justify-content: center; align-items: center; margin: 0 auto 18px auto; color: #a78bfa; border: 1px solid rgba(168, 85, 247, 0.3);">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13h4.5a2 2 0 0 1 1.9 1.39l.25.75"/><path d="M9 13h-4.5a2 2 0 0 0-1.9 1.39l-.25.75"/><path d="M14 17h.01"/><path d="M10 17h.01"/></svg>
+                </div>
+                <h1 style="margin: 0 0 5px 0; font-size: 2.2rem; font-weight: 700;">Bilge AI</h1>
+                <h2 style="margin: 0 0 20px 0; font-size: 1.2rem; font-weight: 500; color: #60a5fa;">İnteraktif Eğitim Asistanı</h2>
+                
+                <p style="font-size: 1.05rem; color: #cbd5e1; line-height: 1.7; margin: 0 0 24px 0;">
+                    Çalışanlar ve öğrenciler için geliştirilen yapay zekâ destekli gerçek zamanlı konuşabilen, eğitim materyallerine göre kişiselleştirilebilen bir dijital asistan deneyimi sunar.
+                </p>
+                
+                <div style="background: rgba(255,255,255,0.05); padding: 15px 20px; border-radius: 12px; margin-bottom: 28px; text-align: left; border: 1px solid rgba(255,255,255,0.05);">
+                    <strong style="color: #fff; display: block; margin-bottom: 8px; font-size: 1rem;">💡 Başlamadan önce</strong>
+                    <ul style="margin: 0; padding-left: 20px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px; font-size: 0.95rem;">
+                        <li>Tarayıcınızın mikrofon erişimine izin verin.</li>
+                        <li>Sessiz bir ortamda bulunmanız önerilir.</li>
+                    </ul>
+                </div>
+
+                <button id="baslat-btn" class="btn btn-primary" style="width: 100%; font-size: 1.1rem; padding: 14px;">
+                    Demoyu Başlat
+                </button>
+            </div>
+        </div>
+
+        <!-- End Overlay -->
+        <div id="end-overlay" class="overlay hidden">
+            <div class="panel">
+                <div style="width: 64px; height: 64px; background: linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(168, 85, 247, 0.2)); border-radius: 50%; display: flex; justify-content: center; align-items: center; margin: 0 auto 18px auto; color: #a78bfa; border: 1px solid rgba(168, 85, 247, 0.3);">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13h4.5a2 2 0 0 1 1.9 1.39l.25.75"/><path d="M9 13h-4.5a2 2 0 0 0-1.9 1.39l-.25.75"/><path d="M14 17h.01"/><path d="M10 17h.01"/></svg>
+                </div>
+                <h1 style="margin: 0 0 5px 0; font-size: 2.2rem; font-weight: 700;">Bilge AI</h1>
+                <h2 style="margin: 0 0 20px 0; font-size: 1.2rem; font-weight: 500; color: #60a5fa;">İnteraktif Eğitim Asistanı</h2>
+                
+                <h3 style="margin: 14px 0 10px 0; font-size: 1.6rem; font-weight: 600; color: #fff;">Görüşmek üzere!</h3>
+                <p style="font-size: 1.05rem; color: #cbd5e1; line-height: 1.65; margin: 0 0 28px 0;">
+                    Bilge AI ile sohbet ettiğiniz için teşekkürler.
+                </p>
+                
+                <button onclick="location.reload()" class="btn btn-primary" style="width: 100%; font-size: 1.1rem; padding: 14px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="m15 18-6-6 6-6"/></svg>
+                    Ana Sayfaya Dön
+                </button>
+            </div>
+        </div>
+
+        {% if demo_dev_tools %}
+        <div id="debug-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 10px;">
+                <strong>🛠️ Dev Tools</strong>
+                <div id="dev-controls">
+                    <button id="test-repeat-btn" class="btn-dev">TTS Test</button>
+                    <button id="test-message-btn" class="btn-dev">LLM Test</button>
+                </div>
+            </div>
+            <div id="debug-logs"></div>
+        </div>
+        {% endif %}
+
+    </div>
+
+    <script type="module">
+        import { LiveAvatarSession, SessionEvent, AgentEventsEnum } from 'https://esm.sh/@heygen/liveavatar-web-sdk';
+
+        const baslatBtn = document.getElementById('baslat-btn');
+        const kapatBtn = document.getElementById('kapat-btn');
+        const micToggleBtn = document.getElementById('mic-toggle-btn');
+        
+        const welcomeOverlay = document.getElementById('welcome-overlay');
+        const endOverlay = document.getElementById('end-overlay');
+        const activeUI = document.getElementById('active-ui');
+        
+        const statusPulse = document.getElementById('status-pulse');
+        const statusText = document.getElementById('status-text');
+        const timerDiv = document.getElementById('timer');
+        
+        let avatarSession = null;
+        let sureSayaci = null;
+        let micMuted = false;
+        let sonGonderilenMesaj = "";
+
+        const chatToggleBtn = document.getElementById('chat-toggle-btn');
+        const chatPanel = document.getElementById('chat-panel');
+        const chatCloseBtn = document.getElementById('chat-close-btn');
+        const chatMessages = document.getElementById('chat-messages');
+        const chatInput = document.getElementById('chat-input');
+        const chatSendBtn = document.getElementById('chat-send-btn');
+
+        function appendMessage(text, sender) {
+            if (!text || !text.trim()) return;
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${sender}`;
+            msgDiv.innerText = text;
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        chatToggleBtn.addEventListener('click', () => {
+            chatPanel.classList.toggle('hidden');
+        });
+        
+        chatCloseBtn.addEventListener('click', () => {
+            chatPanel.classList.add('hidden');
+        });
+
+        function sendChatMessage() {
+            const text = chatInput.value.trim();
+            if (!text) return;
+
+            if (!avatarSession) {
+                appendMessage("Sistem: Bağlantı kapalı. Mesaj gönderilemez.", "system");
+                chatInput.value = '';
+                return;
+            }
+            
+            sonGonderilenMesaj = text;
+            appendMessage(text, 'user');
+            chatInput.value = '';
+            
+            try {
+                if (typeof avatarSession.chat === 'function') {
+                    avatarSession.chat(text);
+                } else if (typeof avatarSession.message === 'function') {
+                    avatarSession.message(text);
+                } else {
+                    avatarSession.speak({ text: text, taskType: "chat" });
+                }
+            } catch (err) {
+                console.error("Mesaj gönderilemedi:", err);
+                appendMessage("Hata: Mesaj gönderilemedi.", "system");
+            }
+        }
+
+        chatSendBtn.addEventListener('click', sendChatMessage);
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendChatMessage();
+            }
+        });
+
+        // Dev Tools Log Function
+        function logDebug(msg) {
+            console.log(`[BilgeAI] ${msg}`);
+            {% if demo_dev_tools %}
+            const debugLogs = document.getElementById('debug-logs');
+            if(debugLogs) {
+                const time = new Date().toLocaleTimeString();
+                debugLogs.innerHTML += `[${time}] ${msg}<br>`;
+                debugLogs.parentElement.scrollTop = debugLogs.parentElement.scrollHeight;
+            }
+            {% endif %}
+        }
+
+        {% if demo_dev_tools %}
+        document.getElementById('test-repeat-btn')?.addEventListener('click', () => {
+            if (!avatarSession) return;
+            logDebug("TTS Test çağrılıyor...");
+            if (typeof avatarSession.speak === 'function') {
+                avatarSession.speak({ text: "Bu bir geliştirici testidir.", taskType: "repeat" });
+            }
+        });
+
+        document.getElementById('test-message-btn')?.addEventListener('click', () => {
+            if (!avatarSession) return;
+            logDebug("LLM Test çağrılıyor...");
+            if (typeof avatarSession.speak === 'function') {
+                avatarSession.speak({ text: "Merhaba, nasılsın?", taskType: "chat" });
+            }
+        });
+        {% endif %}
+
+        function setStatus(text, type = 'normal') {
+            statusText.innerText = text;
+            statusPulse.className = 'pulse'; // reset
+            if(type === 'listening') statusPulse.classList.add('listening');
+            if(type === 'speaking') statusPulse.classList.add('speaking');
+        }
+
+        micToggleBtn.addEventListener('click', () => {
+            if (!avatarSession || !avatarSession.voiceChat) return;
+            if (micMuted) {
+                avatarSession.voiceChat.unmute();
+                micMuted = false;
+                micToggleBtn.innerHTML = `<span id="mic-icon">🎙️</span> Sessize Al`;
+                logDebug("Mikrofon açıldı.");
+            } else {
+                avatarSession.voiceChat.mute();
+                micMuted = true;
+                micToggleBtn.innerHTML = `<span id="mic-icon">🔇</span> Sesi Aç`;
+                logDebug("Mikrofon sessize alındı.");
+            }
+        });
+
+        baslatBtn.addEventListener('click', async () => {
+            baslatBtn.innerText = "Bağlanıyor...";
+            baslatBtn.disabled = true;
+
+            try {
+                const cevap = await fetch('/api/token-al', { method: 'POST' });
+                const veri = await cevap.json();
+
+                if (!veri.durum) {
+                    alert(veri.mesaj);
+                    baslatBtn.innerText = "Demoyu Başlat";
+                    baslatBtn.disabled = false;
+                    return;
+                }
+                
+                welcomeOverlay.classList.add('hidden');
+                activeUI.classList.add('visible');
+                setStatus('Avatar Hazırlanıyor...');
+
+                avatarSession = new LiveAvatarSession(veri.token, {
+                    voiceChat: { defaultMuted: false },
+                    autoKeepAlive: true
+                });
+                
+                avatarSession.on(SessionEvent.SESSION_STREAM_READY, () => {
+                    logDebug("Stream hazır.");
+                    const videoElement = document.getElementById('avatar-video');
+                    avatarSession.attach(videoElement);
+                    videoElement.play().catch(e => console.error("Autoplay blocked", e));
+                    setStatus('Bağlandı', 'normal');
+                });
+
+                avatarSession.on(AgentEventsEnum.USER_SPEAK_STARTED, () => {
+                    setStatus('Sizi dinliyor...', 'listening');
+                });
+
+                avatarSession.on(AgentEventsEnum.USER_SPEAK_ENDED, () => {
+                    setStatus('Düşünüyor...', 'normal');
+                });
+
+                avatarSession.on(AgentEventsEnum.AVATAR_SPEAK_STARTED, () => {
+                    setStatus('Bilge konuşuyor...', 'speaking');
+                });
+                
+                avatarSession.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
+                    setStatus('Bağlandı', 'normal');
+                });
+                
+                avatarSession.on(AgentEventsEnum.USER_TRANSCRIPTION, (text) => {
+                    const msg = text?.text || text || "";
+                    if (!msg) return;
+                    
+                    // Eğer bu mesaj kendi gönderdiğimiz yazılı mesajın echo'suysa, ekrana tekrar basma
+                    if (msg === sonGonderilenMesaj) {
+                        sonGonderilenMesaj = ""; // Sadece ilk echo'yu engelle
+                        return;
+                    }
+                    
+                    appendMessage(msg, 'user');
+                });
+                
+                avatarSession.on(AgentEventsEnum.AVATAR_TRANSCRIPTION, (text) => {
+                    const msg = text?.text || text || "";
+                    if (msg) appendMessage(msg, 'avatar');
+                });
+
+                try {
+                    await avatarSession.start();
+                    logDebug("Session started successfully.");
+                } catch (startError) {
+                    console.error("Session start error:", startError);
+                    alert("Mikrofon izni reddedildi veya bağlantı kurulamadı.");
+                    oturumuBitir(true);
+                    return;
+                }
+
+                zamanlayiciBaslat(veri.max_sure_sn);
+
+            } catch (hata) {
+                console.error("Connection error:", hata);
+                alert("Sunucuya ulaşılamıyor.");
+                baslatBtn.innerText = "Demoyu Başlat";
+                baslatBtn.disabled = false;
+            }
+        });
+
+        kapatBtn.addEventListener('click', () => oturumuBitir(true));
+
+        function zamanlayiciBaslat(saniye) {
+            let kalan = saniye;
+            arayuzuGuncelle(kalan);
+            
+            sureSayaci = setInterval(() => {
+                kalan--;
+                arayuzuGuncelle(kalan);
+                
+                if (kalan <= 0) {
+                    clearInterval(sureSayaci);
+                    oturumuBitir(false);
+                }
+            }, 1000);
+        }
+
+        function arayuzuGuncelle(saniye) {
+            const dk = Math.floor(saniye / 60).toString().padStart(2, '0');
+            const sn = (saniye % 60).toString().padStart(2, '0');
+            timerDiv.innerText = `${dk}:${sn}`;
+        }
+
+        async function oturumuBitir(kullaniciIstegi = false) {
+            if (sureSayaci) clearInterval(sureSayaci);
+            if (avatarSession) {
+                try { await avatarSession.stop(); } catch(e) { console.error("Stop error:", e); }
+                avatarSession = null;
+            }
+            
+            fetch('/api/oturum-kapat', { method: 'POST' }).catch(console.error);
+
+            activeUI.classList.remove('visible');
+            endOverlay.classList.remove('hidden');
+            chatPanel.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
+
