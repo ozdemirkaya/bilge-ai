@@ -23,7 +23,7 @@ To report a security vulnerability privately, please use **GitHub Private Vulner
 3. Click the **Report a vulnerability** button to submit a confidential advisory directly to the repository maintainer.
 
 > [!NOTE]
-> Private Vulnerability Reporting will be enabled in the repository settings (**Settings > Code security and analysis > Private vulnerability reporting**) upon public release. If the reporting button is unavailable, please open a standard repository discussion requesting private security contact without disclosing vulnerability details.
+> Private Vulnerability Reporting is actively enabled for this repository. You can also submit a confidential report directly via the [Security Advisories](https://github.com/ozdemirkaya/bilge-ai/security/advisories/new) page.
 
 ### When submitting a report, please include:
 1. A clear description of the vulnerability and its potential impact.
